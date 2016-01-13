@@ -142,15 +142,19 @@ class node(object):
 	def setDiscountFact_grid(self,factor):
 		self.discountFactor_grid=factor
 
-def PreExistingGrid(inputfilepath):
+def PreExistingGrid(inputfilepath,idx):
 	with fiona.open(inputfilepath+'networks-existing.shp') as source:
-		lines_list=[]
 		for pt in source:
 			for l in range(0,len(pt['geometry']["coordinates"])-1,1):
 				point1= pt['geometry']["coordinates"][l]
 				point2=pt['geometry']["coordinates"][l+1]
-				lines_list.append(LineString([Point(point1),Point(point2)]))
-	return lines_list
+				if point1[0]<point2[0] and point1[1]<point2[1]:
+					idx.insert(l, (point1[0], point1[1], point2[0],point2[1]))
+				elif point1[0]<point2[0] and point1[1]>point2[1]:
+					idx.insert(l, (point1[0], point2[1], point2[0],point1[1]))
+				else:
+					idx.insert(l, (point2[0], point2[1], point1[0],point1[1]))
+	return idx
 
 def createSets(NodeList):
 	length=len(NodeList)
@@ -169,68 +173,54 @@ def calculateDistance(lon1,lat1,lon2,lat2):
 	#print " distance " + str(km)
 	return km
 
-def pnt2line(pnt,idx,lines):
+def pnt2line(pnt,poly_idx,preExistingGridLines):
 	point = Point(pnt)
-	# find the nearest line from the problem point
-	poly_idx=list(idx.nearest((point.coords[0])))
-	np_x=lines[poly_idx[0]].interpolate(lines[poly_idx[0]].project(point)).x
-	np_y=lines[poly_idx[0]].interpolate(lines[poly_idx[0]].project(point)).y
-	dist= calculateDistance(point.x,point.y,np_x,np_y)
-	box=dist
-	interect_box = list(idx.intersection((point.x-box,point.y-box,point.x+box,point.y+box)))
-	mindist=dist
-	lines_index=poly_idx[0]
-	for num, in_id in enumerate(interect_box,1):
-		np_x=lines[in_id].interpolate(lines[in_id].project(point)).x
-		np_y=lines[in_id].interpolate(lines[in_id].project(point)).y
-		dist=calculateDistance(point.x,point.y,np_x,np_y)
-		if mindist>dist:
-			mindist=dist
-			lines_index=in_id
-	np_x=lines[lines_index].interpolate(lines[lines_index].project(point)).x
-	np_y=lines[lines_index].interpolate(lines[lines_index].project(point)).y
-	return mindist,(np_x,np_y)
+	print poly_idx[0]
+	np_x = preExistingGridLines.id(poly_idx[0])
+	print np_x
+	np_y = preExistingGridLines[poly_idx[0]]
+	dist=calculateDistance(pnt[0],pnt[1],np_x,np_y)
+	return dist,(np_x,np_y)
 
-def offGridCosts(current_node,years):
+def offGridCosts(current_node):
 	demand=current_node.getCurrentDemand()
 	hh=current_node.getHouseholds()
 	Node3=offgrid.offgrid()
-	offgrid_initialcost,offgrid_recurrcost,discountFactor_offgrid=Node3.calculateCost(demand,hh,years)
+	offgrid_initialcost,offgrid_recurrcost,discountFactor_offgrid=Node3.calculateCost(demand,hh)
 	return offgrid_initialcost,offgrid_recurrcost,discountFactor_offgrid
 
 
-def miniSolarGridCosts(current_node,years):
+def miniSolarGridCosts(current_node):
 	demand=current_node.getCurrentDemand()
 	hh=current_node.getHouseholds()
 	Node3=solarminigrid.solarMinigrid()
-	solarminigrid_initialcost,solarminigrid_recurcost,discountFactor_minigrid=Node3.calculateCost(demand,hh,years)
+	solarminigrid_initialcost,solarminigrid_recurcost,discountFactor_minigrid=Node3.calculateCost(demand,hh)
 	return solarminigrid_initialcost,solarminigrid_recurcost,discountFactor_minigrid
 
-def gridCosts(current_node,idx,preExistingGridLines,years):
-	point = Point(current_node.getLongitude(),current_node.getLatitude())
-	#poly_idx=list(idx.nearest((point.coords[0])))
-	distance,nearest=pnt2line((current_node.getLongitude(),current_node.getLatitude()),idx,preExistingGridLines)
+def gridCosts(current_node,preExistingGridLines):
+	poly_idx=list(preExistingGridLines.nearest((current_node.getLongitude(),current_node.getLatitude(),current_node.getLongitude(),current_node.getLatitude()),1))
+	distance,nearest=pnt2line((current_node.getLongitude(),current_node.getLatitude()),poly_idx,preExistingGridLines)
 	distance_cost=float(distance)*1000*22
 	Node3=internalGrid.internalGrid()
-	grid_initialcost,grid_recurrcost,discountFactor_grid = Node3.calculateCost(current_node.getCurrentDemand(),current_node.getHouseholds(),distance_cost,years)
+	grid_initialcost,grid_recurrcost,discountFactor_grid = Node3.calculateCost(current_node.getCurrentDemand(),current_node.getHouseholds(),distance_cost)
 	current_node.setNearestGrid_x(nearest[0])
 	current_node.setNearestGrid_y(nearest[1])
 	return grid_initialcost,grid_recurrcost,discountFactor_grid
 
 
-def calculateYears(current_node,idx,preExistingGridLines):
+def calculateYears(current_node,preExistingGridLines):
 	
-	offgrid_initialcost,offgrid_recurrcost,discountFactor_offgrid=offGridCosts(current_node,30)
+	offgrid_initialcost,offgrid_recurrcost,discountFactor_offgrid=offGridCosts(current_node)
 	offgrid_cost=offgrid_initialcost+offgrid_recurrcost*discountFactor_offgrid
-	grid_initialcost,grid_recurrcost,discountFactor_grid=gridCosts(current_node,idx,preExistingGridLines,30)
+	grid_initialcost,grid_recurrcost,discountFactor_grid=gridCosts(current_node,preExistingGridLines)
 	grid_cost=grid_initialcost+grid_recurrcost*discountFactor_grid
-	solarminigrid_initialcost,solarminigrid_recurcost,discountFactor_minigrid=miniSolarGridCosts(current_node,30)
+	solarminigrid_initialcost,solarminigrid_recurcost,discountFactor_minigrid=miniSolarGridCosts(current_node)
 	miniSolargrid_cost=solarminigrid_initialcost+solarminigrid_recurcost*discountFactor_minigrid
 	minimum_cost=min(offgrid_cost,grid_cost,miniSolargrid_cost)
 	newGridCost=0
-	# print "grid costs " + str(grid_cost)
-	# print "offgrid_cost " +str(offgrid_cost)
-	# print "miniSolargrid_cost "+ str(miniSolargrid_cost)
+	#print "grid costs " + str(grid_cost)
+	#print "offgrid_cost " +str(offgrid_cost)
+	#print "miniSolargrid_cost "+ str(miniSolargrid_cost)
 	if current_node.getCurrentDemand()<=current_node.getMaxDemand():
 		if minimum_cost==grid_cost:
 			current_node.setYear(0)
@@ -247,10 +237,9 @@ def calculateYears(current_node,idx,preExistingGridLines):
 	return current_node
 
 def calculateViableSet(nonViableSet,preExistingGridLines):
-	idx=createRtree(preExistingGridLines)
 	viableSet=[]
 	for currentNode in nonViableSet:
-		current_node=calculateYears(currentNode,idx,preExistingGridLines)
+		current_node=calculateYears(currentNode,preExistingGridLines)
 		if current_node.getYears()==0:
 			viableSet.append(currentNode)
 	return viableSet
@@ -272,14 +261,17 @@ def getIndex_LeastMV_hh(viableSet):
 	index=0
 	for item in viableSet:
 		item_mv_hh=calculateDistance(item.getLongitude(),item.getLatitude(),item.getNearestGrid_x(),item.getNearestGrid_y())/item.getHouseholds()
+		print str(item_mv_hh) + " " + str(item.getLongitude()) + " nearest " + str(item.getNearestGrid_x())
 		if minMV_hh>item_mv_hh:
 			minMV_hh=item_mv_hh
 			index=item
+	print "selected mv " + str(minMV_hh)
 	return index
 
 def addLinetoLinesList(pt1_x,pt1_y,pt2_x,pt2_y,preExistingGridLines):
 	preExistingGridLines.append(LineString([Point(pt1_x,pt1_y),Point(pt2_x,pt2_y)]))
-	print "length of lines list " + str(len(preExistingGridLines))
+	print "length of lines list"
+	print len(preExistingGridLines)
 	return preExistingGridLines
 
 def addLine(current_node,year,proposed,preExistingGridLines):
@@ -289,9 +281,9 @@ def addLine(current_node,year,proposed,preExistingGridLines):
 	proposed.record(int(year))
 	current_node.setNPV_grid(current_node.getNPV_grid())
 	current_node.setCurrentDemand(current_node.getStartDemand()*((1.25)**(year/2)))
-	offgrid_initialcost,offgrid_recurrcost,discountFactor_offgrid=offGridCosts(current_node,year)
+	offgrid_initialcost,offgrid_recurrcost,discountFactor_offgrid=offGridCosts(current_node)
 	offgrid_cost=offgrid_initialcost+offgrid_recurrcost*discountFactor_offgrid
-	solarminigrid_initialcost,solarminigrid_recurcost,discountFactor_minigrid=miniSolarGridCosts(current_node,year)
+	solarminigrid_initialcost,solarminigrid_recurcost,discountFactor_minigrid=miniSolarGridCosts(current_node)
 	miniSolargrid_cost=solarminigrid_initialcost+solarminigrid_recurcost*discountFactor_minigrid
 	minimum_cost=min(offgrid_cost,miniSolargrid_cost)
 	if year<=5:
@@ -332,14 +324,15 @@ def increaseCurrentDemand(nonViableSet,year):
 	return nonViableSet
 
 def runBorvuka(viableSet,nonViableSet,preExistingGridLines,proposed,maxyears):
-	t=2
+	#import pudb; pudb.set_trace()
+	t=6
 	completedSet=[]
-	while t<=maxyears:
+	while t<=6:
 		run=0
 		while run==0:
 			print "t "+ str(t)
 			nonViableSet = increaseCurrentDemand(nonViableSet,t)
-			print " demand for this t "+ str(nonViableSet[0].getCurrentDemand())
+			#print " demand for this t "+ str(nonViableSet[0].getCurrentDemand())
 			#print "viableSet "+ str(viableSet)
 			print "completedSet "+ str(len(completedSet))
 			if viableSet==[]:
@@ -347,12 +340,14 @@ def runBorvuka(viableSet,nonViableSet,preExistingGridLines,proposed,maxyears):
 				nonViableSet=decrementremainingSet(nonViableSet,viableSet)
 				print "viableSet"+ str(len(viableSet))
 				while viableSet!=[]:
+					print "size of viable set" + str(len(viableSet))
+					print "length of preExistingGridLines " + str(len(preExistingGridLines))
 					viableSet = increaseCurrentDemand(viableSet,t)
 					index=getIndex_LeastMV_hh(viableSet)
 					proposed,current_node,preExistingGridLines=addLine(index,t,proposed,preExistingGridLines)
 					completedSet.append(current_node)
-					viableSet.remove(index)
-					viableSet=calculateViableSet(viableSet,preExistingGridLines)
+					viableSet.remove(current_node)
+					viableSet = calculateViableSet(viableSet,preExistingGridLines)
 			#print "viableSet "+ str(viableSet)
 			#print "remainingSet "+ str(nonViableSet)
 			run+=1
@@ -374,9 +369,10 @@ def initialize(latitudeList,longitudeList,hhList,inputfilepath,outputfilepath):
 	NodeList = [node(count,longitudeList[count],latitudeList[count],hhList[count]) for count in xrange(len(longitudeList))]
 
 	#convert shapefile to linestrings 
-	preExistingGridLines=PreExistingGrid(inputfilepath)
+	idx = index.Index()
+	idx=preExistingGridLines=PreExistingGrid(inputfilepath,idx)
 
-	# Initialize Viable and Non Viable Sets
+	#Initialize Viable and Non Viable Sets
 	viableSet,nonViableSet=createSets(NodeList)
 
 	#create shapefile
@@ -385,16 +381,16 @@ def initialize(latitudeList,longitudeList,hhList,inputfilepath,outputfilepath):
 	# Run Boruvka's
 	proposed,completedSet=runBorvuka(viableSet,nonViableSet,preExistingGridLines,proposed,16)
 
-	#close Shapefile
-	closeShapefile(proposed,outputfilepath)
+	# #close Shapefile
+	# closeShapefile(proposed,outputfilepath)
 
-	#create Plots
-	NodeList = [node(count,longitudeList[count],latitudeList[count],hhList[count]) for count in xrange(len(longitudeList))]
+	# #create Plots
+	# NodeList = [node(count,longitudeList[count],latitudeList[count],hhList[count]) for count in xrange(len(longitudeList))]
 	# createPlots.households_perc_time(NodeList,completedSet,inputfilepath,outputfilepath,16)
 	# createPlots.NPV_time(NodeList,completedSet,inputfilepath,outputfilepath,16)
-	createPlots.lengthWire_time(NodeList,completedSet,inputfilepath,outputfilepath,16)
+	# createPlots.lengthWire_time(NodeList,completedSet,inputfilepath,outputfilepath,16)
 	# createPlots.plotRevenue(NodeList,completedSet,outputfilepath,16)
 	# createPlots.plotValue(NodeList,completedSet,outputfilepath,16)
 
-	# Save Nodelist as csv file
-	saveData.toCsv(NodeList,completedSet,outputfilepath)
+	# # Save Nodelist as csv file
+	# saveData.toCsv(NodeList,completedSet,outputfilepath)

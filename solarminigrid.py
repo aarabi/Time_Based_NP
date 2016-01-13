@@ -25,7 +25,6 @@ class solarMinigrid(object):
 	def pvPanelActualCap(self,NodalDemand):
 		return max(self.minSysPVCap,self.calCapPV(NodalDemand))
 	def pvPanelCost(self,NodalDemand):
-		print self.pvPanelActualCap(NodalDemand)
 		return self.pvPanelActualCap(NodalDemand)*self.pvPanelCostPerKW
 	def pvrecurrCost(self,NodalDemand):
 		return (self.pvPanelCost(NodalDemand)/self.pvLifetime)
@@ -70,14 +69,15 @@ class solarMinigrid(object):
 		# print "pvOprMainCost  " + str(self.pvOprMainCost(NodalDemand))
 		# print "batteryReplacementCost " + str(self.batteryReplacementCost(NodalDemand))
 		# print "balanceReplacementCost " + str(self.balanceReplacementCost(NodalDemand))
-		return self.pvrecurrCost(NodalDemand) + self.pvOprMainCost(NodalDemand,hh) + self.batteryReplacementCost(NodalDemand) + self.balanceReplacementCost(NodalDemand) + self.wireReplacement(self,NodalDemand,hh) + self.smartReplacement(self,NodalDemand,hh)
+		return self.pvrecurrCost(NodalDemand) + self.pvOprMainCost(NodalDemand,hh) + self.batteryReplacementCost(NodalDemand) + self.balanceReplacementCost(NodalDemand) + self.wireReplacement(NodalDemand,hh) + self.smartReplacement(NodalDemand,hh)
 
 	# initial Cost
 	def initialCost(self,NodalDemand,hh):
 		return self.pvInitialCost(NodalDemand,hh)
 
-	def discountedCashFlowFact_Recurr(self,NodalDemand,hh):
+	def discountedCashFlowFact_Recurr(self,NodalDemand,hh,years):
 		finalCost=0
+		self.timePeriod=years
 		for i in range(1,self.timePeriod):
 			finalCost+=1/(1+self.interestRate)**i
 		return finalCost
@@ -85,15 +85,15 @@ class solarMinigrid(object):
 	def discountedCashFlowFact_Initial(self,NodalDemand,hh):
 		return self.initialCost(NodalDemand,hh)
 
-	def calculateCost(self,NodalDemand,hh):
+	def calculateCost(self,NodalDemand,hh,years):
 		NodalDemand=NodalDemand*hh
-		return self.discountedCashFlowFact_Initial(NodalDemand,hh),self.recurrCost(NodalDemand,hh),self.discountedCashFlowFact_Recurr(NodalDemand,hh)
+		return self.discountedCashFlowFact_Initial(NodalDemand,hh),self.recurrCost(NodalDemand,hh),self.discountedCashFlowFact_Recurr(NodalDemand,hh,years)
 
 
 
 def main():
 	Node3=solarMinigrid()
-	offgrid_cost,rec,fact=Node3.calculateCost(48,20)
+	offgrid_cost,rec,fact=Node3.calculateCost(48,20,30)
 	print offgrid_cost
 	print rec
 	print offgrid_cost+rec*fact

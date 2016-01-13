@@ -12,14 +12,13 @@ class offgrid(object):
 		self.batteryLifetime=4
 		self.balanceLifetime=4
 		self.timePeriod=30
-		self.interestRate=0.07
+		self.interestRate=0.15
 	# PV comp Recurring cost 
 	def calCapPV(self,NodalDemand):
 		return (NodalDemand/((1-self.efficiencyLoss)*self.peakSunHours))
 	def pvPanelActualCap(self,NodalDemand):
 		return max(self.minSysPVCap,self.calCapPV(NodalDemand))
 	def pvPanelCost(self,NodalDemand):
-		print self.pvPanelActualCap(NodalDemand)
 		return self.pvPanelActualCap(NodalDemand)*self.pvPanelCostPerKW
 	def pvrecurrCost(self,NodalDemand):
 		return (self.pvPanelCost(NodalDemand)/self.pvLifetime)
@@ -58,21 +57,22 @@ class offgrid(object):
 	def initialCost(self,NodalDemand):
 		return self.pvInitialCost(NodalDemand)
 
-	def discountedCashFlowFact_Recurr(self,NodalDemand,hh):
+	def discountedCashFlowFact_Recurr(self,NodalDemand,hh,years):
 		finalCost=0
+		self.timePeriod=years
 		for i in range(1,self.timePeriod):
 			finalCost+=1/(1+self.interestRate)**i
 		return finalCost
 
 	def discountedCashFlowFact_Initial(self,NodalDemand,hh):
 		return self.initialCost(NodalDemand)
-	def calculateCost(self,NodalDemand,hh):
+	def calculateCost(self,NodalDemand,hh,years):
 		NodalDemand=NodalDemand*hh
-		return self.discountedCashFlowFact_Initial(NodalDemand,hh),self.recurrCost(NodalDemand),self.discountedCashFlowFact_Recurr(NodalDemand,hh)
+		return self.discountedCashFlowFact_Initial(NodalDemand,hh),self.recurrCost(NodalDemand),self.discountedCashFlowFact_Recurr(NodalDemand,hh,years)
 
 def main():
 	Node3=offgrid()
-	i,r,f=Node3.calculateCost(48,20)
+	i,r,f=Node3.calculateCost(48,20,30)
 	print i
 	print r
 	print i+r*f

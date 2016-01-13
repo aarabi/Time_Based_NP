@@ -63,22 +63,23 @@ class internalGrid(object):
 		return (hh+0.4)*self.lvlineEquipCostperConnection
 	def initialCost(self,demand,hh):
 		return self.installationCost(hh)+self.transformerCost(demand,hh)+self.lvEquipment2(hh)+self.lvInitialCost(hh)
-	def discountedCashFlowFact_Recurr(self,NodalDemand,hh):
+	def discountedCashFlowFact_Recurr(self,NodalDemand,hh,years):
 		finalCost=0
+		self.timePeriod=years
 		for i in range(1,self.timePeriod):
 			finalCost+=1/(1+self.interestRate)**i
 		return finalCost
 
 	def discountedCashFlowFact_Initial(self,NodalDemand,hh,distance_cost):
 		return (self.initialCost(NodalDemand,hh)+ distance_cost)
-	def calculateCost(self,NodalDemand,hh,distance_cost):
-		return self.discountedCashFlowFact_Initial(NodalDemand,hh,distance_cost),self.recurrCost(NodalDemand,hh),self.discountedCashFlowFact_Recurr(NodalDemand,hh)
+	def calculateCost(self,NodalDemand,hh,distance_cost,years):
+		return self.discountedCashFlowFact_Initial(NodalDemand,hh,distance_cost),self.recurrCost(NodalDemand,hh),self.discountedCashFlowFact_Recurr(NodalDemand,hh,years)
 
 
 def main():
 	#backtrackOffgrid(4661647.72727273,250)
 	node = internalGrid()
-	i,r,f=node.calculateCost(500,18,0)
+	i,r,f=node.calculateCost(500,18,0,30)
 	print i+r*f
 if __name__=='__main__':
 	main()
